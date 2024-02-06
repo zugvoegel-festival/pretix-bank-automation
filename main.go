@@ -42,7 +42,6 @@ type NordigenTransactionsResponse struct {
 		Pending []any                 `json:"pending"`
 	} `json:"transactions"`
 }
-
 type PretixOrder struct {
 	Code             string    `json:"code"`
 	Event            string    `json:"event"`
@@ -159,14 +158,11 @@ func main() {
 		log.Fatalf("Error getting transactions: %v", err)
 	}
 
-	// 2. Scan the remittanceInformationUnstructured for the keyword ZV24XXXXX
+	// 2. Scan the remittanceInformationUnstructured for the keyword {{EVENT_SLUG}}{{ORDER_CODE}}
 	for _, transaction := range transactions {
 		result, orderCode := parseRemittanceInformation(transaction.RemittanceInformationUnstructured)
-		log.Printf("%s", transaction.CreditorName)
-		// 3. Split keyword into ZV24 and the rest
-		// Assuming keyword format is ZV24XXXXX
 		if result {
-			// 4. Get order information from Pretix using the rest of the keyword
+			// 3. Get order from Pretix using orderCode
 			order, err := getPretixOrder(orderCode)
 			if err != nil {
 				log.Printf("Error getting order from Pretix for keyword %s: %v", orderCode, err)
@@ -176,7 +172,6 @@ func main() {
 				log.Printf("Order %s is already paid. No further actions required", orderCode)
 				continue
 			}
-
 			if order.Status == "e" {
 				log.Printf("Order %s is expired. Please check Order", orderCode)
 				continue
@@ -185,17 +180,17 @@ func main() {
 				log.Printf("Order %s is canceled paid. Please check Order", orderCode)
 				continue
 			}
-
+			// 4. if order is unpaid and amount is fitting . Mark as paid
 			if order.Total == transaction.TransactionAmount.Amount {
 				err := markAsPaid(orderCode)
 				if err != nil {
 					log.Printf("Error marking order in Pretix for order %s: %v", orderCode, err)
 					continue
 				}
+			} else {
+				log.Printf("Order %s is unpaid but amount doesent match %s  %s", orderCode, order.Total, transaction.TransactionAmount.Amount)
+				continue
 			}
-
-			// Process orderInfo as needed
-			fmt.Printf("Order Info: %+v\n", order)
 		}
 	}
 }
@@ -231,7 +226,6 @@ func getTransactionsFromLast24Hours() ([]NordigenTransaction, error) {
 	}
 
 	return nordigenResp.Transactions.Booked, nil
-
 }
 
 func parseRemittanceInformation(remittanceInfo string) (bool, string) {
@@ -256,7 +250,6 @@ func parseRemittanceInformation(remittanceInfo string) (bool, string) {
 
 	// If no match is found, return empty values
 	return false, ""
-
 }
 
 func getPretixOrder(orderID string) (PretixOrder, error) {
