@@ -8,8 +8,6 @@ import (
 	"os"
 	"regexp"
 	"time"
-
-	"github.com/joho/godotenv"
 )
 
 var NordigenAPIKey string
@@ -145,12 +143,13 @@ type PretixOrder struct {
 }
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
-	}
 
 	NordigenAPIKey = os.Getenv("NORDIGEN_API_KEY")
 	PretixAPIKey = os.Getenv("PRETIX_API_KEY")
+
+	if NordigenAPIKey == "" ||  PretixAPIKey == "" {
+		log.Fatalf("Missing NORDIIGEN_API_KEY or PRETIX_API_KEY",)
+	}
 
 	// 1. Get all transactions from the last 24 hours
 	transactions, err := getTransactionsFromLast24Hours()

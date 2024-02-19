@@ -36,7 +36,7 @@
             inherit version;
             src = ./.;
             #vendorSha256 = pkgs.lib.fakeSha256;
-            vendorHash = "sha256-NHTKwUSIbNCUco88JbHOo3gt6S37ggee+LWNbHaRGEs=";
+            vendorHash = "sha256-gxIPq28lDD9DY3ZhQki4oNsMLOfpsyHniv7RN2MkR9c=";
           };
         });
 
