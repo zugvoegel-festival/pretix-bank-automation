@@ -10,9 +10,6 @@ import (
 	"time"
 )
 
-var NordigenAPIKey string
-var PretixAPIKey string
-
 type NordigenTransaction struct {
 	MandateID         string `json:"mandateId,omitempty"`
 	CreditorID        string `json:"creditorId,omitempty"`
@@ -142,14 +139,34 @@ type PretixOrder struct {
 	ValidIfPending  bool   `json:"valid_if_pending"`
 }
 
-func main() {
+var envNordigenAPIKey string
+var envPretixAPIKey string
+var envNordigenAccountID string
+var envPretixEventSlug string
+var envPretixOrganizerSlug string
+var envPretixBaseUrl string
 
-	NordigenAPIKey = os.Getenv("NORDIGEN_API_KEY")
-	PretixAPIKey = os.Getenv("PRETIX_API_KEY")
-
-	if NordigenAPIKey == "" ||  PretixAPIKey == "" {
-		log.Fatalf("Missing NORDIIGEN_API_KEY or PRETIX_API_KEY",)
+func getenv(key string) string {
+	value := os.Getenv(key)
+	if len(value) == 0 {
+		log.Fatalf("Environment variable %s not set", key)
 	}
+	return value
+}
+
+func init() {
+	envNordigenAPIKey = getenv("NORDIGEN_API_KEY")
+	envPretixAPIKey = getenv("PRETIX_API_KEY")
+	envNordigenAccountID = getenv("NORDIGEN_ACCOUNT_ID")
+	envPretixEventSlug = getenv("PRETIX_EVENT_SLUG")
+	envPretixOrganizerSlug = getenv("PRETIX_ORGANIZER_SLUG")
+	envPretixBaseUrl = getenv("PRETIX_BASE_URL")
+}
+
+type Nordigen struct{}
+type Pretix struct{}
+
+func main() {
 
 	// 1. Get all transactions from the last 24 hours
 	transactions, err := getTransactionsFromLast24Hours()
@@ -181,6 +198,9 @@ func main() {
 			}
 			// 4. if order is unpaid and amount is fitting . Mark as paid
 			if order.Total == transaction.TransactionAmount.Amount {
+
+				// TODO, SECURITY: check for currency!
+
 				err := markAsPaid(orderCode)
 				if err != nil {
 					log.Printf("Error marking order in Pretix for order %s: %v", orderCode, err)
@@ -201,14 +221,14 @@ func getTransactionsFromLast24Hours() ([]NordigenTransaction, error) {
 	endTime := currentTime.Format("2006-01-02")
 
 	// Construct URL for Nordigen API endpoint
-	url := fmt.Sprintf("https://bankaccountdata.gocardless.com/api/v2/accounts/%s/transactions/?date_from=%s&date_to=%s", os.Getenv("NORDIGEN_ACCOUNT_ID"), startTime, endTime)
+	url := fmt.Sprintf("https://bankaccountdata.gocardless.com/api/v2/accounts/%s/transactions/?date_from=%s&date_to=%s", envNordigenAccountID, startTime, endTime)
 
 	// Create HTTP request
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+NordigenAPIKey)
+	req.Header.Set("Authorization", "Bearer "+envNordigenAPIKey)
 
 	// Send HTTP request
 	client := &http.Client{}
@@ -228,7 +248,7 @@ func getTransactionsFromLast24Hours() ([]NordigenTransaction, error) {
 }
 
 func parseRemittanceInformation(remittanceInfo string) (bool, string) {
-	pattern := os.Getenv("PRETIX_EVENT_SLUG") + `[A-Z0-9]{5}`
+	pattern := envPretixEventSlug + `[A-Z0-9]{5}`
 
 	// Compile regular expression
 	re := regexp.MustCompile(pattern)
@@ -252,67 +272,50 @@ func parseRemittanceInformation(remittanceInfo string) (bool, string) {
 }
 
 func getPretixOrder(orderID string) (PretixOrder, error) {
-	// Construct URL for Pretix API endpoint
-	url := fmt.Sprintf("https://%s/api/v1/organizers/%s/events/%s/orders/%s/", os.Getenv("PRETIX_BASE_URL"), os.Getenv("PRETIX_ORGANIZER_SLUG"), os.Getenv("PRETIX_EVENT_SLUG"), orderID)
+
+	var order PretixOrder
+	url := fmt.Sprintf("https://%s/api/v1/organizers/%s/events/%s/orders/%s/", envPretixBaseUrl, envPretixOrganizerSlug, envPretixEventSlug, orderID)
 
 	// Create HTTP request
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return PretixOrder{}, err
+		return order, err
 	}
-	req.Header.Set("Authorization", "Token "+os.Getenv("PRETIX_API_KEY"))
+
+	err = order.fromRequest(req)
+	return order, err
+
+}
+
+func (p *PretixOrder) fromRequest(req *http.Request) error {
+
+	req.Header.Set("Authorization", "Token "+envPretixAPIKey)
 
 	// Send HTTP request
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return PretixOrder{}, err
+		return err
 	}
 	defer resp.Body.Close()
 
-	// Check response status code
 	if resp.StatusCode != http.StatusOK {
-		return PretixOrder{}, fmt.Errorf("Pretix API returned non-200 status code: %d", resp.StatusCode)
+		return fmt.Errorf("Pretix API returned non-200 status code: %d", resp.StatusCode)
 	}
 
-	// Parse JSON response
-	var pretixOrder PretixOrder
-	if err := json.NewDecoder(resp.Body).Decode(&pretixOrder); err != nil {
-		return PretixOrder{}, err
-	}
-
-	return pretixOrder, nil
+	return json.NewDecoder(resp.Body).Decode(&p)
 }
 
 func markAsPaid(orderID string) error {
 	// Construct URL for Pretix API endpoint
-	url := fmt.Sprintf("https://%s/api/v1/organizers/%s/events/%s/orders/%s/mark_paid", os.Getenv("PRETIX_BASE_URL"), os.Getenv("PRETIX_ORGANIZER_SLUG"), os.Getenv("PRETIX_EVENT_SLUG"), orderID)
+	url := fmt.Sprintf("https://%s/api/v1/organizers/%s/events/%s/orders/%s/mark_paid", envPretixBaseUrl, envPretixOrganizerSlug, envPretixEventSlug, orderID)
 
 	// Create HTTP request
 	req, err := http.NewRequest("POST", url, nil)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Token "+os.Getenv("PRETIX_API_KEY"))
 
-	// Send HTTP request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	// Check response status code
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Pretix API returned non-200 status code: %d", resp.StatusCode)
-	}
-
-	// Parse JSON response
-	var pretixOrder PretixOrder
-	if err := json.NewDecoder(resp.Body).Decode(&pretixOrder); err != nil {
-		return err
-	}
-
-	return nil
+	var order PretixOrder
+	return order.fromRequest(req)
 }
