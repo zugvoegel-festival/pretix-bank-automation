@@ -350,6 +350,7 @@ func (p *NordigenTransactionsResponse) fromRequest(req *http.Request) error {
 		return err
 	}
 	defer resp.Body.Close()
+	// TODO add refresh mechanism for nordigen token as token has only 1 h lifetime
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("Nordigen API returned non-200 status code: %d", resp.StatusCode)
