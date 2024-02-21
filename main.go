@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -151,8 +152,11 @@ type BankAutomationError struct {
 }
 
 var envNordigenAPIKey string
-var envPretixAPIKey string
+var envNordigenRefreshToken string
 var envNordigenAccountID string
+var envNordigenSecretId string
+var envNordigenSecretKey string
+var envPretixAPIKey string
 var envPretixEventSlug string
 var envPretixOrganizerSlug string
 var envPretixBaseUrl string
@@ -178,8 +182,11 @@ func init() {
 	godotenv.Load(".env")
 
 	envNordigenAPIKey = getenv("NORDIGEN_API_KEY")
-	envPretixAPIKey = getenv("PRETIX_API_KEY")
+	envNordigenRefreshToken = getenv("NORDIGEN_REFRESH_KEY")
+	envNordigenSecretId = getenv("NORDIGEN_SECRET_ID")
+	envNordigenSecretKey = getenv("NORDIGEN_SECRET_KEY")
 	envNordigenAccountID = getenv("NORDIGEN_ACCOUNT_ID")
+	envPretixAPIKey = getenv("PRETIX_API_KEY")
 	envPretixEventSlug = getenv("PRETIX_EVENT_SLUG")
 	envPretixOrganizerSlug = getenv("PRETIX_ORGANIZER_SLUG")
 	envPretixBaseUrl = getenv("PRETIX_BASE_URL")
@@ -303,6 +310,131 @@ func getTransactionsFromLast24Hours() ([]NordigenTransaction, error) {
 	err = resp.fromRequest(req)
 	return resp.Transactions.Booked, err
 }
+func (p *NordigenTransactionsResponse) fromRequest(req *http.Request) error {
+
+	req.Header.Set("Authorization", "Bearer "+envNordigenAPIKey)
+
+	// Send HTTP request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		err := refreshNordigenToken()
+		if err != nil {
+			return err
+		}
+
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Nordigen API returned non-200 status code: %d", resp.StatusCode)
+	}
+	return json.NewDecoder(resp.Body).Decode(&p)
+}
+
+type NordigenRefreshResponse struct {
+	Access        string `json:"access"`
+	AccessExpires int    `json:"access_expires"`
+}
+
+func (p *NordigenRefreshResponse) fromRequest(req *http.Request) error {
+
+	req.Header.Set("Content-Type", "application/json")
+
+	// Send HTTP request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		err := loginToNordigen()
+		if err != nil {
+			return err
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Nordigen API returned non-200 status code: %d", resp.StatusCode)
+	}
+	return json.NewDecoder(resp.Body).Decode(&p)
+}
+
+func refreshNordigenToken() error {
+
+	var resp NordigenRefreshResponse
+
+	bodyParams := []byte(fmt.Sprintf(`{"refresh":"%s"}`, envNordigenRefreshToken))
+
+	req, err := http.NewRequest("POST", "https://bankaccountdata.gocardless.com/api/v2/token/refresh/", bytes.NewBuffer(bodyParams))
+
+	if err != nil {
+		return err
+	}
+	err = resp.fromRequest(req)
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("NORDIGEN_API_KEY", resp.Access)
+	if err != nil {
+		fmt.Println("Error setting environment variable NORDIGEN_API_KEY:", err)
+		return err
+	}
+	return nil
+}
+
+type NordigenLoginResponse struct {
+	Access         string `json:"access"`
+	AccessExpires  int    `json:"access_expires"`
+	Refresh        string `json:"refresh"`
+	RefreshExpires int    `json:"refresh_expires"`
+}
+
+func (p *NordigenLoginResponse) fromRequest(req *http.Request) error {
+
+	req.Header.Set("Content-Type", "application/json")
+
+	// Send HTTP request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Nordigen API returned non-200 status code: %d", resp.StatusCode)
+	}
+	return json.NewDecoder(resp.Body).Decode(&p)
+}
+
+func loginToNordigen() error {
+
+	var resp NordigenLoginResponse
+	bodyParams := []byte(fmt.Sprintf(`{"secret_id":"%s" ,"secret_key":"%s" }`, envNordigenSecretId, envNordigenSecretKey))
+
+	req, err := http.NewRequest("POST", "https://bankaccountdata.gocardless.com/api/v2/token/new/", bytes.NewBuffer(bodyParams))
+	if err != nil {
+		return err
+	}
+	err = resp.fromRequest(req)
+	if err != nil {
+		return err
+	}
+	err = os.Setenv("NORDIGEN_API_KEY", resp.Access)
+	if err != nil {
+		fmt.Println("Error setting environment variable NORDIGEN_API_KEY:", err)
+		return err
+	}
+	err = os.Setenv("NORDIGEN_REFRESH_KEY", resp.Refresh)
+	if err != nil {
+		fmt.Println("Error setting environment variable NORDIGEN_REFRESH_KEY:", err)
+		return err
+	}
+	return nil
+}
 
 func parseRemittanceInformation(input string) (string, error) {
 
@@ -338,24 +470,6 @@ func getPretixOrder(orderID string) (PretixOrder, error) {
 	err = order.fromRequest(req)
 	return order, err
 
-}
-func (p *NordigenTransactionsResponse) fromRequest(req *http.Request) error {
-
-	req.Header.Set("Authorization", "Bearer "+envNordigenAPIKey)
-
-	// Send HTTP request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	// TODO add refresh mechanism for nordigen token as token has only 1 h lifetime
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Nordigen API returned non-200 status code: %d", resp.StatusCode)
-	}
-	return json.NewDecoder(resp.Body).Decode(&p)
 }
 
 func (p *PretixOrder) fromRequest(req *http.Request) error {
