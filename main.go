@@ -5,9 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/smtp"
 	"os"
 	"regexp"
+	"strings"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 type NordigenTransaction struct {
@@ -139,12 +143,27 @@ type PretixOrder struct {
 	ValidIfPending  bool   `json:"valid_if_pending"`
 }
 
+type BankAutomationError struct {
+	Code                  string `json:"code"`
+	FromAccount           string `json:"fromAccount"`
+	RemittanceInformation string `json:"remittanceInformation"`
+	Reason                string `json:"reason"`
+}
+
 var envNordigenAPIKey string
 var envPretixAPIKey string
 var envNordigenAccountID string
 var envPretixEventSlug string
 var envPretixOrganizerSlug string
 var envPretixBaseUrl string
+var smtpPort string
+var smtpServer string
+var smtpUsername string
+var smtpPassword string
+var senderEmail string
+var recipientEmail string
+var bankAutomationErrors []BankAutomationError = []BankAutomationError{}
+var bankAutomationError BankAutomationError
 
 func getenv(key string) string {
 	value := os.Getenv(key)
@@ -155,63 +174,114 @@ func getenv(key string) string {
 }
 
 func init() {
+	// Extra no error check here. Default should be defined environment variables. This is only for development
+	godotenv.Load(".env")
+
 	envNordigenAPIKey = getenv("NORDIGEN_API_KEY")
 	envPretixAPIKey = getenv("PRETIX_API_KEY")
 	envNordigenAccountID = getenv("NORDIGEN_ACCOUNT_ID")
 	envPretixEventSlug = getenv("PRETIX_EVENT_SLUG")
 	envPretixOrganizerSlug = getenv("PRETIX_ORGANIZER_SLUG")
 	envPretixBaseUrl = getenv("PRETIX_BASE_URL")
+	smtpPort = getenv("SMTP_PORT")
+	smtpServer = getenv("SMTP_SERVER")
+	smtpUsername = getenv("SMTP_USER")
+	smtpPassword = getenv("SMTP_PASSWORD")
+	senderEmail = getenv("SENDER_MAIL")
+	recipientEmail = getenv("RECIPIENT_MAIL")
 }
 
 type Nordigen struct{}
 type Pretix struct{}
+
+func addBankAutomationError(errorMessage string) {
+	bankAutomationError.Reason = errorMessage
+	bankAutomationErrors = append(bankAutomationErrors, bankAutomationError)
+}
 
 func main() {
 
 	// 1. Get all transactions from the last 24 hours
 	transactions, err := getTransactionsFromLast24Hours()
 	if err != nil {
-		log.Fatalf("Error getting transactions: %v", err)
+		msg := fmt.Sprintf("Error getting transactions: %v", err)
+		sendEmailNotification(msg)
+		log.Fatalf(msg)
+
 	}
 
 	// 2. Scan the remittanceInformationUnstructured for the keyword {{EVENT_SLUG}}{{ORDER_CODE}}
+
 	for _, transaction := range transactions {
-		result, orderCode := parseRemittanceInformation(transaction.RemittanceInformationUnstructured)
-		if result {
-			// 3. Get order from Pretix using orderCode
-			order, err := getPretixOrder(orderCode)
+
+		if transaction.DebtorAccount.Iban == "" {
+			// check if deposit or withdrawal
+			continue
+		}
+		if transaction.RemittanceInformationUnstructured == "" {
+			// check if remittance empty
+			continue
+		}
+		transaction.RemittanceInformationUnstructured = "FEST-F7CXX "
+		bankAutomationError.RemittanceInformation = transaction.RemittanceInformationUnstructured
+		bankAutomationError.FromAccount = transaction.DebtorAccount.Iban
+
+		orderCode, err := parseRemittanceInformation(transaction.RemittanceInformationUnstructured)
+		if err != nil {
+			addBankAutomationError(err.Error())
+			log.Printf("%v RemittanceInfo: %s", err, transaction.RemittanceInformationUnstructured)
+			continue
+		}
+		bankAutomationError.Code = orderCode
+
+		// 3. Get order from Pretix using orderCode
+		order, err := getPretixOrder(orderCode)
+		if err != nil {
+			addBankAutomationError(err.Error())
+			log.Printf("%v OrderCode: %s", err, orderCode)
+			continue
+		}
+		if order.Status == "p" {
+			addBankAutomationError("Order is already paid")
+			log.Printf(" %s. Please check %s", bankAutomationError.Reason, orderCode)
+			continue
+		}
+		if order.Status == "e" {
+			addBankAutomationError("Order is expired")
+			bankAutomationErrors = append(bankAutomationErrors, bankAutomationError)
+			log.Printf(" %s. Please check %s", bankAutomationError.Reason, orderCode)
+			continue
+		}
+		if order.Status == "c" {
+			addBankAutomationError("Order is canceled")
+			log.Printf(" %s. Please check %s", bankAutomationError.Reason, orderCode)
+			continue
+		}
+		// 4. if order is unpaid and amount is fitting . Mark as paid
+		if order.Total == transaction.TransactionAmount.Amount && transaction.TransactionAmount.Currency == "EUR" {
+			// TODO, SECURITY: check for currency!
+			err := markAsPaid(orderCode)
 			if err != nil {
-				log.Printf("Error getting order from Pretix for keyword %s: %v", orderCode, err)
+				addBankAutomationError(err.Error())
+				log.Printf(" %s. Please check %s", bankAutomationError.Reason, orderCode)
 				continue
 			}
-			if order.Status == "p" {
-				log.Printf("Order %s is already paid. No further actions required", orderCode)
-				continue
-			}
-			if order.Status == "e" {
-				log.Printf("Order %s is expired. Please check Order", orderCode)
-				continue
-			}
-			if order.Status == "c" {
-				log.Printf("Order %s is canceled paid. Please check Order", orderCode)
-				continue
-			}
-			// 4. if order is unpaid and amount is fitting . Mark as paid
-			if order.Total == transaction.TransactionAmount.Amount {
-
-				// TODO, SECURITY: check for currency!
-
-				err := markAsPaid(orderCode)
-				if err != nil {
-					log.Printf("Error marking order in Pretix for order %s: %v", orderCode, err)
-					continue
-				}
-			} else {
-				log.Printf("Order %s is unpaid but amount doesent match %s  %s", orderCode, order.Total, transaction.TransactionAmount.Amount)
-				continue
-			}
+		} else {
+			addBankAutomationError(fmt.Sprintf("amount doesn't match Order: %s  Transaction: %s %s", order.Total, transaction.TransactionAmount.Amount, transaction.TransactionAmount.Currency))
+			log.Printf(" %s. Please check %s", bankAutomationError.Reason, orderCode)
+			continue
 		}
 	}
+
+	var body string
+
+	if len(bankAutomationErrors) == 0 {
+		body = "No errors today. JUHU"
+	} else {
+		body = convertToCSV(bankAutomationErrors)
+	}
+
+	sendEmailNotification(body)
 }
 
 func getTransactionsFromLast24Hours() ([]NordigenTransaction, error) {
@@ -221,6 +291,7 @@ func getTransactionsFromLast24Hours() ([]NordigenTransaction, error) {
 	endTime := currentTime.Format("2006-01-02")
 
 	// Construct URL for Nordigen API endpoint
+	var resp NordigenTransactionsResponse
 	url := fmt.Sprintf("https://bankaccountdata.gocardless.com/api/v2/accounts/%s/transactions/?date_from=%s&date_to=%s", envNordigenAccountID, startTime, endTime)
 
 	// Create HTTP request
@@ -228,47 +299,29 @@ func getTransactionsFromLast24Hours() ([]NordigenTransaction, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+envNordigenAPIKey)
 
-	// Send HTTP request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Parse JSON response
-	var nordigenResp NordigenTransactionsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&nordigenResp); err != nil {
-		return nil, err
-	}
-
-	return nordigenResp.Transactions.Booked, nil
+	err = resp.fromRequest(req)
+	return resp.Transactions.Booked, err
 }
 
-func parseRemittanceInformation(remittanceInfo string) (bool, string) {
-	pattern := envPretixEventSlug + `[A-Z0-9]{5}`
+func parseRemittanceInformation(input string) (string, error) {
 
-	// Compile regular expression
-	re := regexp.MustCompile(pattern)
+	prefix := "(?i)" + envPretixEventSlug + "-"
 
-	// Find matches in the remittance information
-	matches := re.FindStringSubmatch(remittanceInfo)
+	pattern := "^" + prefix + "([A-Z0-9]{5})$"
 
-	// Check if any match is found
-	if len(matches) > 0 {
-		// First match is the keyword
-		keyword := matches[0]
-
-		// Rest of the information after the keyword
-		rest := remittanceInfo[len(keyword):]
-
-		return true, rest
+	// Compile the regular expression
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return "", fmt.Errorf("error compiling regex: %v", err)
 	}
 
-	// If no match is found, return empty values
-	return false, ""
+	input = strings.ReplaceAll(input, " ", "")
+	match := re.FindStringSubmatch(input)
+	if match != nil {
+		return match[1], nil
+	}
+	return "", fmt.Errorf("couldn't parse remittance info")
 }
 
 func getPretixOrder(orderID string) (PretixOrder, error) {
@@ -285,6 +338,24 @@ func getPretixOrder(orderID string) (PretixOrder, error) {
 	err = order.fromRequest(req)
 	return order, err
 
+}
+func (p *NordigenTransactionsResponse) fromRequest(req *http.Request) error {
+
+	req.Header.Set("Authorization", "Bearer "+envNordigenAPIKey)
+
+	// Send HTTP request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	// TODO add refresh mechanism for nordigen token as token has only 1 h lifetime
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Nordigen API returned non-200 status code: %d", resp.StatusCode)
+	}
+	return json.NewDecoder(resp.Body).Decode(&p)
 }
 
 func (p *PretixOrder) fromRequest(req *http.Request) error {
@@ -318,4 +389,34 @@ func markAsPaid(orderID string) error {
 
 	var order PretixOrder
 	return order.fromRequest(req)
+}
+
+func convertToCSV(data []BankAutomationError) string {
+	var lines []string
+	lines = append(lines, "OrderCode,FromAccount,RemittanceInformation,Reason")
+	for _, row := range data {
+		row := fmt.Sprintf("%s,%s,%s,%s", row.Code, row.FromAccount, row.RemittanceInformation, row.Reason)
+		lines = append(lines, row)
+	}
+	return strings.Join(lines, "\n")
+}
+func sendEmailNotification(body string) error {
+	// Email content
+	subject := "Pretix Bank Automatisierung " + time.Now().Format("02-01-2006")
+
+	// Authentication
+	auth := smtp.PlainAuth("", smtpUsername, smtpPassword, smtpServer)
+
+	// Sending email
+	msg := []byte("To: " + recipientEmail + "\r\n" +
+		"Subject: " + subject + "\r\n" +
+		"\r\n" +
+		body + "\r\n")
+
+	err := smtp.SendMail(smtpServer+":"+fmt.Sprint(smtpPort), auth, senderEmail, []string{recipientEmail}, msg)
+
+	if err != nil {
+		return fmt.Errorf("failed to send email: %v", err)
+	}
+	return nil
 }
