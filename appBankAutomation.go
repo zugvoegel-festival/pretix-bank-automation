@@ -19,8 +19,7 @@ func (e PretixBankAutomation) Run() {
 	// 1. Get all transactions from the last 24 hours
 	transactions, err := getTransactionsFromLast24Hours()
 	if err != nil {
-		msg := fmt.Sprintf("Error getting transactions: %v", err)
-		log.Fatalf(msg)
+		log.Fatalf("Error getting transactions: %v", err)
 		sendEmailNotification(msg)
 
 	}
