@@ -1,11 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"encoding/csv"
 	"fmt"
 	"log"
 	"net/smtp"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -83,11 +84,13 @@ func addBankAutomationError(errorMessage string) {
 }
 
 func convertToCSV(data []BankAutomationError) string {
-	var lines []string
-	lines = append(lines, "OrderCode,FromAccount,RemittanceInformation,Reason")
+	buf := new(bytes.Buffer)
+	w := csv.NewWriter(buf)
+	w.Write([]string{"OrderCode", "FromAccount", "RemittanceInformation", "Reason"})
+
 	for _, row := range data {
-		row := fmt.Sprintf("%s,%s,%s,%s", row.Code, row.FromAccount, row.RemittanceInformation, row.Reason)
-		lines = append(lines, row)
+		w.Write([]string{row.Code, row.FromAccount, row.RemittanceInformation, row.Reason})
 	}
-	return strings.Join(lines, "\n")
+	w.Flush()
+	return buf.String()
 }

@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -131,9 +133,11 @@ var pretixConfig = NewPretixConfig()
 func getPretixOrder(orderCode string) (PretixOrder, error) {
 
 	var order PretixOrder
-	url := fmt.Sprintf("https://%s/api/v1/organizers/%s/events/%s/orders/%s/", pretixConfig.BaseUrl, pretixConfig.OrganizerSlug, pretixConfig.EventSlug, orderCode)
 
-	// Create HTTP request
+	url, err := url.JoinPath("https://", pretixConfig.BaseUrl, "/api/v1/organizers/", pretixConfig.OrganizerSlug, "/events/", pretixConfig.EventSlug, "/orders/", orderCode, "/")
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return order, err
@@ -144,10 +148,11 @@ func getPretixOrder(orderCode string) (PretixOrder, error) {
 }
 
 func markAsPaid(orderCode string) error {
-	// Construct URL for Pretix API endpoint
-	url := fmt.Sprintf("https://%s/api/v1/organizers/%s/events/%s/orders/%s/mark_paid", pretixConfig.BaseUrl, pretixConfig.OrganizerSlug, pretixConfig.EventSlug, orderCode)
 
-	// Create HTTP request
+	url, err := url.JoinPath("https://", pretixConfig.BaseUrl, "/api/v1/organizers/", pretixConfig.OrganizerSlug, "/events/", pretixConfig.EventSlug, "/orders/", orderCode, "/mark_paid")
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
 	req, err := http.NewRequest("POST", url, nil)
 	if err != nil {
 		return err

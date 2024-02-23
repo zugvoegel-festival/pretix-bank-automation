@@ -22,7 +22,7 @@ func main() {
 
 	dur, err := time.ParseDuration(mainConfig.Cycle)
 	if err != nil {
-		fmt.Printf("Error parsing duration : %v\n", err)
+		fmt.Println("Error parsing duration : %v\n", err)
 
 	}
 	app := PretixBankAutomation{}
