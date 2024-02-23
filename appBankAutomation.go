@@ -103,9 +103,7 @@ func (e PretixBankAutomation) Run() {
 
 func parseRemittanceInformation(input string, eventSlug string) (string, error) {
 
-	prefix := "(?i)" + eventSlug + "-"
-
-	pattern := "^" + prefix + "([A-Z0-9]{5})$"
+	pattern := "^(?i)" + eventSlug + "-([A-Z0-9]{5})$"
 
 	// Compile the regular expression
 	re, err := regexp.Compile(pattern)
