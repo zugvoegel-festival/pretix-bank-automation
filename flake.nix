@@ -31,8 +31,8 @@
           pkgs = nixpkgsFor.${system};
         in
         {
-          bank-automation = pkgs.buildGo122Module {
-            pname = "bank-automation";
+          pretix-bank-automation = pkgs.buildGo122Module {
+            pname = "pretix-bank-automation";
             inherit version;
             src = ./.;
             # vendorSha256 = pkgs.lib.fakeSha256;
@@ -43,6 +43,6 @@
       # The default package for 'nix build'. This makes sense if the
       # flake provides only one package or there is a clear "main"
       # package.
-      defaultPackage = forAllSystems (system: self.packages.${system}.bank-automation);
+      defaultPackage = forAllSystems (system: self.packages.${system}.pretix-bank-automation);
     };
 }
