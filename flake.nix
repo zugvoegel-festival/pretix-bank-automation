@@ -2,7 +2,7 @@
   description = "A simple Go package";
 
   # Nixpkgs / NixOS version to use.
-  # inputs.nixpkgs.url = "nixpkgs/nixos-unstable";
+  inputs.nixpkgs.url = "nixpkgs/nixos-unstable";
 
   outputs = { self, nixpkgs }:
     let
@@ -31,12 +31,12 @@
           pkgs = nixpkgsFor.${system};
         in
         {
-          bank-automation = pkgs.buildGoModule {
+          bank-automation = pkgs.buildGo122Module {
             pname = "bank-automation";
             inherit version;
             src = ./.;
-            #vendorSha256 = pkgs.lib.fakeSha256;
-            vendorHash = "sha256-gxIPq28lDD9DY3ZhQki4oNsMLOfpsyHniv7RN2MkR9c=";
+            # vendorSha256 = pkgs.lib.fakeSha256;
+            vendorHash = "sha256-Ow6Gb3ORkpv25JfNu0tmRscBcluWbkRP+AQtSJneTzE=";
           };
         });
 
