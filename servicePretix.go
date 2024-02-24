@@ -175,7 +175,7 @@ func (p *PretixOrder) fromRequest(req *http.Request) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Pretix API returned non-200 status code: %d", resp.StatusCode)
+		return fmt.Errorf("pretix API returned non-200 status code: %d", resp.StatusCode)
 	}
 
 	return json.NewDecoder(resp.Body).Decode(&p)

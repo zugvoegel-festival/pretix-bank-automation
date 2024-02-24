@@ -47,7 +47,7 @@ var mailConfig = NewMailConfig()
 
 func sendEmailNotification(body string) error {
 	// Email content
-	subject := "Pretix Bank Automatisierung " + time.Now().Format("02-01-2006")
+	subject := "Pretix Bank Automatisierung " + time.Now().Format("02-01-2006 15:04")
 
 	// Authentication
 	auth := smtp.PlainAuth("", mailConfig.SmtpUsername, mailConfig.SmtpPassword, mailConfig.SmtpServer)

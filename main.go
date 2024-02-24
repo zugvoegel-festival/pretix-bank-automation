@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -22,12 +23,12 @@ func main() {
 
 	dur, err := time.ParseDuration(mainConfig.Cycle)
 	if err != nil {
-		fmt.Println("Error parsing duration : %v\n", err)
+		msg := fmt.Sprintf("Error parsing duration : %v\n", err)
+		log.Println(msg)
 
 	}
 	app := PretixBankAutomation{}
 	for {
-		fmt.Println("Foo")
 		app.Run()
 		time.Sleep(time.Second * time.Duration(dur.Seconds()))
 	}

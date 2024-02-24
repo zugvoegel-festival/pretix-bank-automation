@@ -5,13 +5,16 @@ import (
 	"log"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type PretixBankAutomation struct {
 }
 
 func (e PretixBankAutomation) Run() {
-	// 1. Get all transactions from the last 24 hours
+
+	msg := fmt.Sprintf("Pretix Bank Automatisierung " + time.Now().Format("02-01-2006 15:04"))
+	log.Println(msg)
 	transactions, err := getTransactionsFromLast24Hours()
 	if err != nil {
 		msg := fmt.Sprintf("Error getting transactions: %v", err)
@@ -36,7 +39,8 @@ func (e PretixBankAutomation) Run() {
 		orderCode, err := parseRemittanceInformation(transaction.RemittanceInformationUnstructured, pretixConfig.EventSlug)
 		if err != nil {
 			addBankAutomationError(err.Error())
-			log.Println("%v RemittanceInfo: %s", err, transaction.RemittanceInformationUnstructured)
+			msg := fmt.Sprintf("%v RemittanceInfo: %s", err, transaction.RemittanceInformationUnstructured)
+			log.Println(msg)
 			continue
 		}
 		bankAutomationError.Code = orderCode
@@ -45,37 +49,42 @@ func (e PretixBankAutomation) Run() {
 		order, err := getPretixOrder(orderCode)
 		if err != nil {
 			addBankAutomationError(err.Error())
-			log.Println("%v OrderCode: %s", err, orderCode)
+			msg := fmt.Sprintf("%v OrderCode: %s", err, orderCode)
+			log.Println(msg)
 			continue
 		}
 		if order.Status == "p" {
 			addBankAutomationError("Order is already paid")
-			log.Println(" %s. Please check %s", bankAutomationError.Reason, orderCode)
+			msg := fmt.Sprintf(" %s. Please check %s", bankAutomationError.Reason, orderCode)
+			log.Println(msg)
 			continue
 		}
 		if order.Status == "e" {
 			addBankAutomationError("Order is expired")
 			bankAutomationErrors = append(bankAutomationErrors, bankAutomationError)
-			log.Println(" %s. Please check %s", bankAutomationError.Reason, orderCode)
+			msg := fmt.Sprintf(" %s. Please check %s", bankAutomationError.Reason, orderCode)
+			log.Println(msg)
 			continue
 		}
 		if order.Status == "c" {
 			addBankAutomationError("Order is canceled")
-			log.Println(" %s. Please check %s", bankAutomationError.Reason, orderCode)
+			msg := fmt.Sprintf(" %s. Please check %s", bankAutomationError.Reason, orderCode)
+			log.Println(msg)
 			continue
 		}
 		// 4. if order is unpaid and amount is fitting . Mark as paid
 		if order.Total == transaction.TransactionAmount.Amount && transaction.TransactionAmount.Currency == "EUR" {
-			// TODO, SECURITY: check for currency!
 			err := markAsPaid(orderCode)
 			if err != nil {
 				addBankAutomationError(err.Error())
-				log.Println(" %s. Please check %s", bankAutomationError.Reason, orderCode)
+				msg := fmt.Sprintf(" %s. Please check %s", bankAutomationError.Reason, orderCode)
+				log.Println(msg)
 				continue
 			}
 		} else {
 			addBankAutomationError(fmt.Sprintf("amount doesn't match Order: %s  Transaction: %s %s", order.Total, transaction.TransactionAmount.Amount, transaction.TransactionAmount.Currency))
-			log.Println(" %s. Please check %s", bankAutomationError.Reason, orderCode)
+			msg := fmt.Sprintf(" %s. Please check %s", bankAutomationError.Reason, orderCode)
+			log.Println(msg)
 			continue
 		}
 	}
