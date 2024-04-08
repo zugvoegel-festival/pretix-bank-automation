@@ -149,7 +149,7 @@ func getPretixOrder(orderCode string) (PretixOrder, error) {
 
 func markAsPaid(orderCode string) error {
 
-	url, err := url.JoinPath("https://", pretixConfig.BaseUrl, "/api/v1/organizers/", pretixConfig.OrganizerSlug, "/events/", pretixConfig.EventSlug, "/orders/", orderCode, "/mark_paid")
+	url, err := url.JoinPath("https://", pretixConfig.BaseUrl, "/api/v1/organizers/", pretixConfig.OrganizerSlug, "/events/", pretixConfig.EventSlug, "/orders/", orderCode, "/mark_paid/")
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
