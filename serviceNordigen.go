@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -38,8 +39,9 @@ func getTransactionsFromLast24Hours() ([]go_nordigen.Transaction, error) {
 
 	txs, err := nordigenConfig.Client.GetAccountTransactions(nordigenConfig.AccountId, dateFrom, dateEnd)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("%v", err)
+		return nil, fmt.Errorf("%v", err)
 	}
 
-	return txs.Booked, err
+	return txs.Booked, fmt.Errorf("%v", err)
 }
