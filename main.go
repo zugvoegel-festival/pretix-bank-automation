@@ -50,6 +50,12 @@ func main() {
 			log.Println(msg)
 			continue
 		}
+		if order.Status == "n" {
+			addBankAutomationError("Order is pending")
+			msg := fmt.Sprintf(" %s. Please check %s", bankAutomationError.Reason, orderCode)
+			log.Println(msg)
+			continue
+		}
 		if order.Status == "p" {
 			addBankAutomationError("Order is already paid")
 			msg := fmt.Sprintf(" %s. Please check %s", bankAutomationError.Reason, orderCode)
