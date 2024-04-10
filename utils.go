@@ -123,7 +123,8 @@ func convertErrorToCSV(data []BankAutomationError) string {
 		w.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.RemittanceInformation, row.Reason})
 	}
 	w.Flush()
-	return buf.String()
+	result := fmt.Sprintf("%d errors marking orders as paid\n\n%s", len(data), buf.String())
+	return result
 }
 func convertSuccessToCSV(data []BankAutomationSuccess) string {
 	buf := new(bytes.Buffer)
@@ -134,5 +135,7 @@ func convertSuccessToCSV(data []BankAutomationSuccess) string {
 		w.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.BankTransactionCode, row.RemittanceInformation})
 	}
 	w.Flush()
-	return buf.String()
+
+	result := fmt.Sprintf("%d successfull orders marked as paid\n\n%s", len(data), buf.String())
+	return result
 }
