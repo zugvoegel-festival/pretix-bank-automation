@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/smtp"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -58,7 +59,8 @@ func sendEmailNotification(body string) error {
 		"\r\n" +
 		body + "\r\n")
 
-	err := smtp.SendMail(mailConfig.SmtpServer+":"+fmt.Sprint(mailConfig.SmtpPort), auth, mailConfig.SenderEmail, []string{mailConfig.RecipientEmail}, msg)
+	recipients := strings.Split(mailConfig.RecipientEmail, ",")
+	err := smtp.SendMail(mailConfig.SmtpServer+":"+fmt.Sprint(mailConfig.SmtpPort), auth, mailConfig.SenderEmail, recipients, msg)
 
 	if err != nil {
 		log.Fatalf("Error sending mail: %v", err)
