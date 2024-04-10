@@ -32,6 +32,12 @@ func main() {
 		}
 		bankAutomationError.RemittanceInformation = transaction.RemittanceInformationUnstructured
 		bankAutomationError.FromAccount = transaction.DebtorAccount.IBAN
+		bankAutomationError.BookingDate = transaction.BookingDate
+
+		bankAutomationSuccess.RemittanceInformation = transaction.RemittanceInformationUnstructured
+		bankAutomationSuccess.FromAccount = transaction.DebtorAccount.IBAN
+		bankAutomationSuccess.BankTransactionCode = transaction.BookingDate
+		bankAutomationSuccess.BookingDate = transaction.BookingDate
 
 		orderCode, err := parseRemittanceInformation(transaction.RemittanceInformationUnstructured, pretixConfig.EventSlug)
 		if err != nil {
@@ -41,7 +47,7 @@ func main() {
 			continue
 		}
 		bankAutomationError.Code = orderCode
-
+		bankAutomationSuccess.Code = orderCode
 		// 3. Get order from Pretix using orderCode
 		order, err := getPretixOrder(orderCode)
 		if err != nil {
@@ -50,7 +56,7 @@ func main() {
 			log.Println(msg)
 			continue
 		}
-		if order.Status == "n" {
+		if order.Status == "n" && order.RequireApproval {
 			addBankAutomationError("Order is pending")
 			msg := fmt.Sprintf(" %s. Please check %s", bankAutomationError.Reason, orderCode)
 			log.Println(msg)
@@ -84,6 +90,7 @@ func main() {
 				log.Println(msg)
 				continue
 			}
+			addBankAutomationSuccess()
 		} else {
 			addBankAutomationError(fmt.Sprintf("amount doesn't match Order: %s  Transaction: %s %s", order.Total, transaction.TransactionAmount.Amount, transaction.TransactionAmount.Currency))
 			msg := fmt.Sprintf(" %s. Please check %s", bankAutomationError.Reason, orderCode)
@@ -92,13 +99,7 @@ func main() {
 		}
 	}
 
-	var body string
-
-	if len(bankAutomationErrors) == 0 {
-		body = "No errors today. JUHU"
-	} else {
-		body = convertToCSV(bankAutomationErrors)
-	}
+	body := createEmailBody()
 
 	sendEmailNotification(body)
 
@@ -106,7 +107,7 @@ func main() {
 
 func parseRemittanceInformation(input string, eventSlug string) (string, error) {
 
-	pattern := "^(?i)" + eventSlug + "-([A-Z0-9]{5})$"
+	pattern := "^(?i).*" + eventSlug + "-([A-Z0-9]{5}).*"
 
 	// Compile the regular expression
 	re, err := regexp.Compile(pattern)

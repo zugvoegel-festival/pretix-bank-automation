@@ -71,25 +71,67 @@ func sendEmailNotification(body string) error {
 type BankAutomationError struct {
 	Code                  string `json:"code"`
 	FromAccount           string `json:"from_account"`
+	BookingDate           string `json:"booking_date"`
 	RemittanceInformation string `json:"remittance_information"`
 	Reason                string `json:"reason"`
+}
+type BankAutomationSuccess struct {
+	Code                  string `json:"code"`
+	FromAccount           string `json:"from_account"`
+	BankTransactionCode   string `json:"bank_transaction_code"`
+	BookingDate           string `json:"booking_date"`
+	RemittanceInformation string `json:"remittance_information"`
 }
 
 var bankAutomationErrors []BankAutomationError = []BankAutomationError{}
 var bankAutomationError BankAutomationError
+var bankAutomationSuccesses []BankAutomationSuccess = []BankAutomationSuccess{}
+var bankAutomationSuccess BankAutomationSuccess
 
 func addBankAutomationError(errorMessage string) {
 	bankAutomationError.Reason = errorMessage
 	bankAutomationErrors = append(bankAutomationErrors, bankAutomationError)
 }
+func addBankAutomationSuccess() {
+	bankAutomationSuccesses = append(bankAutomationSuccesses, bankAutomationSuccess)
+}
+func createEmailBody() string {
+	var errorBody string
+	var successBody string
 
-func convertToCSV(data []BankAutomationError) string {
+	if len(bankAutomationErrors) == 0 {
+		errorBody = "No errors today. JUHU \n"
+	} else {
+		errorBody = convertErrorToCSV(bankAutomationErrors)
+	}
+
+	if len(bankAutomationErrors) == 0 {
+		successBody = "No success today. moooeeepp \n"
+	} else {
+		successBody = convertSuccessToCSV(bankAutomationSuccesses)
+	}
+
+	return errorBody + "\n\n\n" + successBody
+
+}
+func convertErrorToCSV(data []BankAutomationError) string {
 	buf := new(bytes.Buffer)
 	w := csv.NewWriter(buf)
-	w.Write([]string{"OrderCode", "FromAccount", "RemittanceInformation", "Reason"})
+	w.Write([]string{"BookingDate", "OrderCode", "FromAccount", "RemittanceInformation", "Reason"})
 
 	for _, row := range data {
-		w.Write([]string{row.Code, row.FromAccount, row.RemittanceInformation, row.Reason})
+		w.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.RemittanceInformation, row.Reason})
+	}
+	w.Flush()
+	return buf.String()
+}
+func convertSuccessToCSV(data []BankAutomationSuccess) string {
+	buf := new(bytes.Buffer)
+	w := csv.NewWriter(buf)
+	w.Write([]string{"BookingDate", "OrderCode", "FromAccount", "BankTransactionCode", "RemittanceInformation"})
+
+	for _, row := range data {
+		w.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.BankTransactionCode, row.RemittanceInformation})
 	}
 	w.Flush()
 	return buf.String()
