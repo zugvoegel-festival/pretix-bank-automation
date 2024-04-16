@@ -76,6 +76,7 @@ const (
 	bankError BankAutomationLogType = iota
 	bankWarning
 	bankSuccess
+	bankVerbose
 )
 
 type BankAutomationLog struct {

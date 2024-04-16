@@ -60,9 +60,7 @@ func main() {
 			continue
 		}
 		if order.Status == "p" {
-			addBankAutomationLog(bankWarning, "Order is already paid")
-			msg := fmt.Sprintf(" %s. Please check %s", BankAutomationSingleLog.Reason, orderCode)
-			log.Println(msg)
+			addBankAutomationLog(bankVerbose, "Order is already paid")
 			continue
 		}
 		if order.Status == "e" {
