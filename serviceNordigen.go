@@ -31,17 +31,15 @@ func NewNordigenConfig() *NordigenConfig {
 
 var nordigenConfig = NewNordigenConfig()
 
-func getTransactionsFromLast24Hours() ([]go_nordigen.Transaction, error) {
+func getTransactionsFromToday() ([]go_nordigen.Transaction, error) {
 
-	currentTime := time.Now().UTC()
-	dateFrom := currentTime.Add(-24 * time.Hour).Format("2006-01-02")
-	dateEnd := currentTime.Format("2006-01-02")
+	date := time.Now().UTC().Format("2006-01-02")
 
-	txs, err := nordigenConfig.Client.GetAccountTransactions(nordigenConfig.AccountId, dateFrom, dateEnd)
+	txs, err := nordigenConfig.Client.GetAccountTransactions(nordigenConfig.AccountId, date, date)
 	if err != nil {
 		log.Printf("%v", err)
 		return nil, fmt.Errorf("%v", err)
 	}
 
-	return txs.Booked, fmt.Errorf("%v", err)
+	return txs.Booked, err
 }
