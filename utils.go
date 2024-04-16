@@ -70,74 +70,75 @@ func sendEmailNotification(body string) error {
 	return nil
 }
 
-type BankAutomationError struct {
-	Code                  string `json:"code"`
-	FromAccount           string `json:"from_account"`
-	BookingDate           string `json:"booking_date"`
-	RemittanceInformation string `json:"remittance_information"`
-	Reason                string `json:"reason"`
-}
-type BankAutomationSuccess struct {
-	Code                  string `json:"code"`
-	FromAccount           string `json:"from_account"`
-	BankTransactionCode   string `json:"bank_transaction_code"`
-	BookingDate           string `json:"booking_date"`
-	RemittanceInformation string `json:"remittance_information"`
+type BankAutomationLogType int
+
+const (
+	bankError BankAutomationLogType = iota
+	bankWarning
+	bankSuccess
+)
+
+type BankAutomationLog struct {
+	Code                  string                `json:"code"`
+	FromAccount           string                `json:"from_account"`
+	BankTransactionCode   string                `json:"bank_transaction_code"`
+	BookingDate           string                `json:"booking_date"`
+	RemittanceInformation string                `json:"remittance_information"`
+	Reason                string                `json:"reason"`
+	Type                  BankAutomationLogType `json:"bank_automation_error_type"`
 }
 
-var bankAutomationErrors []BankAutomationError = []BankAutomationError{}
-var bankAutomationError BankAutomationError
-var bankAutomationSuccesses []BankAutomationSuccess = []BankAutomationSuccess{}
-var bankAutomationSuccess BankAutomationSuccess
+var BankAutomationLogs []BankAutomationLog = []BankAutomationLog{}
+var BankAutomationSingleLog BankAutomationLog
 
-func addBankAutomationError(errorMessage string) {
-	bankAutomationError.Reason = errorMessage
-	bankAutomationErrors = append(bankAutomationErrors, bankAutomationError)
-}
-func addBankAutomationSuccess() {
-	bankAutomationSuccesses = append(bankAutomationSuccesses, bankAutomationSuccess)
-}
-func createEmailBody() string {
-	var errorBody string
-	var successBody string
+func addBankAutomationLog(bankAutomationType BankAutomationLogType, errorMessage string) {
 
-	if len(bankAutomationErrors) == 0 {
-		errorBody = "No errors today. JUHU \n"
-	} else {
-		errorBody = convertErrorToCSV(bankAutomationErrors)
+	BankAutomationSingleLog.Reason = errorMessage
+	BankAutomationSingleLog.Type = bankAutomationType
+	BankAutomationLogs = append(BankAutomationLogs, BankAutomationSingleLog)
+}
+
+func convertToCSV() string {
+	errorBuff := new(bytes.Buffer)
+	errorWriter := csv.NewWriter(errorBuff)
+	errorWriter.Write([]string{"BookingDate", "OrderCode", "FromAccount", "RemittanceInformation", "Reason"})
+
+	successBuff := new(bytes.Buffer)
+	successWriter := csv.NewWriter(successBuff)
+	successWriter.Write([]string{"BookingDate", "OrderCode", "FromAccount", "BankTransactionCode", "RemittanceInformation"})
+
+	warningBuff := new(bytes.Buffer)
+	warningWriter := csv.NewWriter(warningBuff)
+	warningWriter.Write([]string{"BookingDate", "OrderCode", "FromAccount", "RemittanceInformation", "Reason"})
+
+	errorCount := 0
+	warningCount := 0
+	successCount := 0
+
+	for _, row := range BankAutomationLogs {
+		switch row.Type {
+		case bankError:
+			errorWriter.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.RemittanceInformation, row.Reason})
+			errorCount++
+			break
+		case bankWarning:
+			warningWriter.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.RemittanceInformation, row.Reason})
+			warningCount++
+			break
+		case bankSuccess:
+			successWriter.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.BankTransactionCode, row.RemittanceInformation})
+			successCount++
+			break
+		}
 	}
 
-	if len(bankAutomationErrors) == 0 {
-		successBody = "No success today. moooeeepp \n"
-	} else {
-		successBody = convertSuccessToCSV(bankAutomationSuccesses)
-	}
+	errorWriter.Flush()
+	successWriter.Flush()
+	warningWriter.Flush()
 
-	return errorBody + "\n\n\n" + successBody
+	errorResult := fmt.Sprintf("%d errors marking orders as paid\n\n%s", errorCount, errorBuff.String())
+	successResult := fmt.Sprintf("%d successfull marked orders as paid\n\n%s", successCount, successBuff.String())
+	warningResult := fmt.Sprintf("%d warnings marking orders as paid\n\n%s", warningCount, warningBuff.String())
 
-}
-func convertErrorToCSV(data []BankAutomationError) string {
-	buf := new(bytes.Buffer)
-	w := csv.NewWriter(buf)
-	w.Write([]string{"BookingDate", "OrderCode", "FromAccount", "RemittanceInformation", "Reason"})
-
-	for _, row := range data {
-		w.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.RemittanceInformation, row.Reason})
-	}
-	w.Flush()
-	result := fmt.Sprintf("%d errors marking orders as paid\n\n%s", len(data), buf.String())
-	return result
-}
-func convertSuccessToCSV(data []BankAutomationSuccess) string {
-	buf := new(bytes.Buffer)
-	w := csv.NewWriter(buf)
-	w.Write([]string{"BookingDate", "OrderCode", "FromAccount", "BankTransactionCode", "RemittanceInformation"})
-
-	for _, row := range data {
-		w.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.BankTransactionCode, row.RemittanceInformation})
-	}
-	w.Flush()
-
-	result := fmt.Sprintf("%d successfull orders marked as paid\n\n%s", len(data), buf.String())
-	return result
+	return errorResult + "\n\n\n" + successResult + "\n\n\n" + warningResult
 }
