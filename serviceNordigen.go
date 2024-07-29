@@ -33,9 +33,11 @@ var nordigenConfig = NewNordigenConfig()
 
 func getTransactionsFromToday() ([]go_nordigen.Transaction, error) {
 
-	date := time.Now().UTC().Format("2006-01-02")
+	dateTo := time.Now().UTC().Format("2006-01-02")
 
-	txs, err := nordigenConfig.Client.GetAccountTransactions(nordigenConfig.AccountId, date, date)
+	dateFrom := time.Now().UTC().Add(time.Duration(-24) * time.Hour).Format("2006-01-02")
+
+	txs, err := nordigenConfig.Client.GetAccountTransactions(nordigenConfig.AccountId, dateFrom, dateTo)
 	if err != nil {
 		log.Printf("%v", err)
 		return nil, fmt.Errorf("%v", err)
