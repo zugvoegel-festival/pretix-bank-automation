@@ -86,6 +86,7 @@ type BankAutomationLog struct {
 	BookingDate           string                `json:"booking_date"`
 	RemittanceInformation string                `json:"remittance_information"`
 	Reason                string                `json:"reason"`
+	Amount                string                `json:"amount"`
 	Type                  BankAutomationLogType `json:"bank_automation_error_type"`
 }
 
@@ -102,7 +103,7 @@ func addBankAutomationLog(bankAutomationType BankAutomationLogType, errorMessage
 func convertToCSV() string {
 	errorBuff := new(bytes.Buffer)
 	errorWriter := csv.NewWriter(errorBuff)
-	errorWriter.Write([]string{"BookingDate", "OrderCode", "FromAccount", "RemittanceInformation", "Reason"})
+	errorWriter.Write([]string{"BookingDate", "OrderCode", "FromAccount", "Amount", "RemittanceInformation", "Reason"})
 
 	successBuff := new(bytes.Buffer)
 	successWriter := csv.NewWriter(successBuff)
@@ -119,7 +120,7 @@ func convertToCSV() string {
 	for _, row := range BankAutomationLogs {
 		switch row.Type {
 		case bankError:
-			errorWriter.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.RemittanceInformation, row.Reason})
+			errorWriter.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.Amount, row.RemittanceInformation, row.Reason})
 			errorCount++
 			break
 		case bankWarning:
