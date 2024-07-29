@@ -35,6 +35,7 @@ func main() {
 		BankAutomationSingleLog.FromAccount = transaction.DebtorAccount.IBAN
 		BankAutomationSingleLog.BankTransactionCode = transaction.BookingDate
 		BankAutomationSingleLog.BookingDate = transaction.BookingDate
+		BankAutomationSingleLog.Amount = transaction.TransactionAmount.Amount
 
 		orderCode, err := parseRemittanceInformation(transaction.RemittanceInformationUnstructured, pretixConfig.EventSlug)
 		if err != nil {
