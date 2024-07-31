@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"time"
+	"unicode/utf8"
 
 	go_nordigen "github.com/ricardograndecros/go-nordigen"
 )
@@ -35,10 +37,30 @@ func getTransactionsFromToday() ([]go_nordigen.Transaction, error) {
 
 	dateTo := time.Now().UTC().Format("2006-01-02")
 
-	dateFrom := time.Now().UTC().Add(time.Duration(-24) * time.Hour).Format("2006-01-02")
+	dateFrom := time.Now().UTC().Add(time.Duration(-24*3) * time.Hour).Format("2006-01-02")
 
 	txs, err := nordigenConfig.Client.GetAccountTransactions(nordigenConfig.AccountId, dateFrom, dateTo)
 	if err != nil {
+		errStr := err.Error()
+		if len(errStr) > 0 {
+			// Find the last rune and its position
+			r, size := utf8.DecodeLastRuneInString(errStr)
+			if r == utf8.RuneError {
+				fmt.Println("Error decoding the last rune.")
+				return nil, fmt.Errorf("error decoding the last rune")
+			}
+
+			// Convert the last rune to an integer
+			runeValue := int(r)
+
+			// Remove the last rune and append its integer representation
+			newErrStr := errStr[:len(errStr)-size] + strconv.Itoa(runeValue)
+
+			log.Printf("%v", newErrStr)
+			return nil, fmt.Errorf("%v", newErrStr)
+		} else {
+			fmt.Println("The error string is empty.")
+		}
 		log.Printf("%v", err)
 		return nil, fmt.Errorf("%v", err)
 	}
