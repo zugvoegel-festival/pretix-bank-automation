@@ -14,7 +14,9 @@ import (
 )
 
 func getEnv(key string) string {
-	godotenv.Load(".env")
+	if err := godotenv.Load(".env"); err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
 	value := os.Getenv(key)
 	if len(value) == 0 {
 		log.Fatalf("Environment variable %s not set", key)
@@ -46,7 +48,7 @@ func NewMailConfig() *MailConfig {
 
 var mailConfig = NewMailConfig()
 
-func sendEmailNotification(body string) error {
+func sendEmailNotification(body string) {
 	// Email content
 	subject := "Pretix Bank Automatisierung " + time.Now().Format("02-01-2006 15:04")
 
@@ -64,10 +66,9 @@ func sendEmailNotification(body string) error {
 
 	if err != nil {
 		log.Fatalf("Error sending mail: %v", err)
-		return err
-
+		log.Printf("Error sending email notification: %v", err)
 	}
-	return nil
+
 }
 
 type BankAutomationLogType int
@@ -103,16 +104,20 @@ func addBankAutomationLog(bankAutomationType BankAutomationLogType, errorMessage
 func convertToCSV() string {
 	errorBuff := new(bytes.Buffer)
 	errorWriter := csv.NewWriter(errorBuff)
-	errorWriter.Write([]string{"BookingDate", "OrderCode", "FromAccount", "Amount", "RemittanceInformation", "Reason"})
+	if err := errorWriter.Write([]string{"BookingDate", "OrderCode", "FromAccount", "Amount", "RemittanceInformation", "Reason"}); err != nil {
+		log.Fatalf("Error writing to CSV: %v", err)
+	}
 
 	successBuff := new(bytes.Buffer)
 	successWriter := csv.NewWriter(successBuff)
-	successWriter.Write([]string{"BookingDate", "OrderCode", "FromAccount", "BankTransactionCode", "RemittanceInformation"})
-
+	if err := successWriter.Write([]string{"BookingDate", "OrderCode", "FromAccount", "BankTransactionCode", "RemittanceInformation"}); err != nil {
+		log.Fatalf("Error writing to CSV: %v", err)
+	}
 	warningBuff := new(bytes.Buffer)
 	warningWriter := csv.NewWriter(warningBuff)
-	warningWriter.Write([]string{"BookingDate", "OrderCode", "FromAccount", "RemittanceInformation", "Reason"})
-
+	if err := warningWriter.Write([]string{"BookingDate", "OrderCode", "FromAccount", "RemittanceInformation", "Reason"}); err != nil {
+		log.Fatalf("Error writing to CSV: %v", err)
+	}
 	errorCount := 0
 	warningCount := 0
 	successCount := 0
@@ -120,17 +125,20 @@ func convertToCSV() string {
 	for _, row := range BankAutomationLogs {
 		switch row.Type {
 		case bankError:
-			errorWriter.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.Amount, row.RemittanceInformation, row.Reason})
+			if err := errorWriter.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.Amount, row.RemittanceInformation, row.Reason}); err != nil {
+				log.Fatalf("Error writing to CSV: %v", err)
+			}
 			errorCount++
-			break
 		case bankWarning:
-			warningWriter.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.RemittanceInformation, row.Reason})
+			if err := warningWriter.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.RemittanceInformation, row.Reason}); err != nil {
+				log.Fatalf("Error writing to CSV: %v", err)
+			}
 			warningCount++
-			break
 		case bankSuccess:
-			successWriter.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.BankTransactionCode, row.RemittanceInformation})
+			if err := successWriter.Write([]string{row.BookingDate, row.Code, row.FromAccount, row.BankTransactionCode, row.RemittanceInformation}); err != nil {
+				log.Fatalf("Error writing to CSV: %v", err)
+			}
 			successCount++
-			break
 		}
 	}
 

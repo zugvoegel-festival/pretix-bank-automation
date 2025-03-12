@@ -9,13 +9,27 @@ import (
 )
 
 func main() {
+	loadRequisitionData()
 
 	msg := fmt.Sprintf("Pretix Bank Automatisierung " + time.Now().Format("02-01-2006 15:04"))
 	log.Println(msg)
-	transactions, err := getTransactionsFromToday()
+	_, err, statusCode := checkRequisition()
+	if err != nil {
+		if statusCode == 404 {
+			//	link, err, statusCode := reAuthorize()
+			//sendEmailNotification("Re Authorizing. Click Link to authorize" + link)
+		}
+	}
+
+	transactions, err, statusCode := getTransactionsFromToday()
 	if err != nil {
 		msg := fmt.Sprintf("Error getting transactions: %v", err)
-		sendEmailNotification(msg)
+		if statusCode == 404 {
+			msg = fmt.Sprintf("No transactions found")
+			sendEmailNotification("")
+		} else {
+			sendEmailNotification(msg)
+		}
 	}
 
 	// 2. Scan the remittanceInformationUnstructured for the keyword {{EVENT_SLUG}}{{ORDER_CODE}}
